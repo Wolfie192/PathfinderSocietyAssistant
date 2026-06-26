@@ -6,7 +6,7 @@ import re
 import streamlit as st
 
 from pathlib import Path
-from core.scenario_data import ScenarioData # Import the new ScenarioData class
+from core.scenario_data import ScenarioData  # Import the new ScenarioData class
 from modules.ImageModule import ImageModule
 from modules.TextModule import TextModule
 from modules.ReadAloudModule import ReadAloudModule
@@ -21,6 +21,7 @@ class ScenarioManager:
     Class for managing scenario data and save states as the scenario is being run.
     Manages scenario data and save states as modules are added, modified, and/or deleted.
     """
+
     def __init__(self, season: str, scenario: str, root_dir: Path):
         # Define and create scenario-specific directories
         self.scenario_dir = root_dir / "data" / season / scenario
@@ -35,19 +36,20 @@ class ScenarioManager:
         # Store season and scenario identifiers
         self.season: str = season
         self.scenario: str = scenario
-        
+
         # Retrieve scenario details using ScenarioData class for better encapsulation
         self.name: str = ScenarioData.get_scenario_name(self.season, self.scenario)
         self.tier_min: int = ScenarioData.get_scenario_tier_min(self.season, self.scenario)
         self.tier_max: int = ScenarioData.get_scenario_tier_max(self.season, self.scenario)
-        
+
         # Initialize scenario data structure with a default main page
         self.scenario_data: dict = {"pages": [{"label": "Main Page", "modules": []}]}
-        self.scenario_state: dict = {} # Stores dynamic state during scenario play
-        self.current_page = "landing_page" # Initial page state
+        self.scenario_state: dict = {}  # Stores dynamic state during scenario play
+        self.current_page = "landing_page"  # Initial page state
 
-        self.load() # Load existing scenario data and state
+        self.root_dir = root_dir  # Store root_dir for passing to modules
 
+        self.load()  # Load existing scenario data and state
 
     def load(self):
         """
@@ -83,16 +85,15 @@ class ScenarioManager:
             # Initialize empty state if no state file exists
             self.scenario_state = {}
 
-
     def reset(self):
         """
         Method for resetting the scenario_state.
         Wipes all dynamic data like character rosters and combat states.
         """
         self.scenario_state = {}
-        st.session_state.active_dialog = None # Clear any active dialogs
-        st.session_state.editing_module_data = None # Clear any module being edited
-        self.save() # Persist the reset state
+        st.session_state.active_dialog = None  # Clear any active dialogs
+        st.session_state.editing_module_data = None  # Clear any module being edited
+        self.save()  # Persist the reset state
 
     def _module_save_callback(self):
         """
@@ -117,7 +118,6 @@ class ScenarioManager:
         with open(scenario_state_path, "w", encoding="utf-8") as f:
             json.dump(self.scenario_state, f, indent=4)
 
-
     def _get_tier_mode(self):
         """
         Calculates the tier mode (Low/High) based on the total challenge points (CP)
@@ -130,7 +130,7 @@ class ScenarioManager:
         cp_map = {0: 2, 1: 3, 2: 4, 3: 6}
 
         for char in roster:
-            level = char.get("level", self.tier_min) # Default to min tier if level not found
+            level = char.get("level", self.tier_min)  # Default to min tier if level not found
             diff = int(level) - self.tier_min
             total_cp += cp_map.get(diff, 0)
 
@@ -140,9 +140,14 @@ class ScenarioManager:
         else:
             tier = "Low"
 
-        self.scenario_state["total_cp"] = total_cp # Store total CP in scenario state
+        self.scenario_state["total_cp"] = total_cp  # Store total CP in scenario state
         return tier, total_cp
 
+    def _update_edit_mode_state(self):
+        """
+        Callback function to update st.session_state.edit_mode when the checkbox is toggled.
+        """
+        st.session_state.edit_mode = st.session_state.edit_mode_widget
 
     def run(self):
         """
@@ -156,7 +161,7 @@ class ScenarioManager:
 
         # Calculate and display scenario scaling information
         tier_mode, total_cp = self._get_tier_mode()
-        self.scenario_state["tier_mode"] = tier_mode # Store tier mode in scenario state
+        self.scenario_state["tier_mode"] = tier_mode  # Store tier mode in scenario state
 
         st.sidebar.subheader("Scenario Scaling")
         st.sidebar.markdown(f"**Total CP:** {total_cp}")
@@ -172,8 +177,8 @@ class ScenarioManager:
 
         # Streamlit radio button for page selection
         selected_page_label = st.sidebar.radio(
-            "Select Page", 
-            page_labels, 
+            "Select Page",
+            page_labels,
             index=self.scenario_state["current_page_idx"],
             label_visibility="collapsed"
         )
@@ -188,16 +193,17 @@ class ScenarioManager:
             self.save()
             st.rerun()
 
-        # Sidebar buttons for page management
-        col1, col2 = st.sidebar.columns(2)
-        with col1:
-            if st.button("➕ Page", use_container_width=True):
-                st.session_state.active_dialog = "add_page"
-                st.rerun()
-        with col2:
-            if st.button("⚙️ Page", use_container_width=True):
-                st.session_state.active_dialog = "edit_page"
-                st.rerun()
+        # Sidebar buttons for page management (conditional on edit mode)
+        if st.session_state.edit_mode:
+            col1, col2 = st.sidebar.columns(2)
+            with col1:
+                if st.button("➕ Page", use_container_width=True):
+                    st.session_state.active_dialog = "add_page"
+                    st.rerun()
+            with col2:
+                if st.button("⚙️ Page", use_container_width=True):
+                    st.session_state.active_dialog = "edit_page"
+                    st.rerun()
 
         # Handle active dialogs (add page, edit page, add module, edit module)
         active_diag = st.session_state.get("active_dialog")
@@ -207,7 +213,7 @@ class ScenarioManager:
             self.edit_page_dialog()
         elif active_diag == "add_module":
             self.add_module_dialog()
-        elif isinstance(active_diag, int): # If active_dialog is an integer, it's a module index for editing
+        elif isinstance(active_diag, int):  # If active_dialog is an integer, it's a module index for editing
             # Initialize editing_module_data buffer if not already set
             if st.session_state.get("editing_module_data") is None:
                 try:
@@ -228,18 +234,29 @@ class ScenarioManager:
                 st.rerun()
         with exit_col:
             if st.button("Exit Scenario", use_container_width=True):
-                self.save() # Save current state before exiting
-                st.session_state.scenario_manager = None # Clear scenario manager from session state
+                self.save()  # Save current state before exiting
+                st.session_state.scenario_manager = None  # Clear scenario manager from session state
                 if "current_scenario" in st.session_state:
-                    st.session_state.current_scenario = None # Clear current scenario selection
+                    st.session_state.current_scenario = None  # Clear current scenario selection
                 st.rerun()
 
-        # Button to add a new module to the current page
-        _, action_col = st.columns([0.9, 0.1])
-        with action_col:
-            if st.button("➕ Module", use_container_width=True):
-                st.session_state.active_dialog = "add_module"
-                st.rerun()
+        # --- Edit Mode Toggle ---
+        st.sidebar.divider()
+        st.sidebar.checkbox(
+            "⚙️ Edit Mode",
+            value=st.session_state.edit_mode,
+            key="edit_mode_widget",  # Unique key for the widget
+            on_change=self._update_edit_mode_state  # Callback to update st.session_state.edit_mode
+        )
+        # --- End Edit Mode Toggle ---
+
+        # Button to add a new module to the current page (conditional on edit mode)
+        if st.session_state.edit_mode:
+            _, action_col = st.columns([0.9, 0.1])
+            with action_col:
+                if st.button("➕ Module", use_container_width=True):
+                    st.session_state.active_dialog = "add_module"
+                    st.rerun()
 
         # Render modules for the active page
         active_page = self.scenario_data["pages"][self.scenario_state["current_page_idx"]]
@@ -279,9 +296,9 @@ class ScenarioManager:
                     mod.render()
                 elif module_data["type"] == "character_roster":
                     mod = CharacterRosterModule(
-                        self.scenario_state, 
-                        self.tier_min, 
-                        self.tier_max, 
+                        self.scenario_state,
+                        self.tier_min,
+                        self.tier_max,
                         self._module_save_callback
                     )
                     mod.render()
@@ -292,7 +309,8 @@ class ScenarioManager:
                         self.scenario_state.get("tier_mode", "Low"),
                         index,
                         self._module_save_callback,
-                        self.monster_dir
+                        self.monster_dir,
+                        self.root_dir  # Pass root_dir here
                     )
                     mod.render()
                 elif module_data["type"] == "skill_check":
@@ -306,13 +324,13 @@ class ScenarioManager:
                     mod.render()
 
             with control_col:
-                # Edit button for each module
-                if st.button("📝", key=f"edit_{index}", help="Edit this module"):
-                    # Store a deep copy of the module data for editing to prevent direct modification
-                    st.session_state.editing_module_data = json.loads(json.dumps(module_data))
-                    st.session_state.active_dialog = index # Set active dialog to the module's index
-                    st.rerun()
-
+                # Edit button for each module (conditional on edit mode)
+                if st.session_state.edit_mode:
+                    if st.button("📝", key=f"edit_{index}", help="Edit this module"):
+                        # Store a deep copy of the module data for editing to prevent direct modification
+                        st.session_state.editing_module_data = json.loads(json.dumps(module_data))
+                        st.session_state.active_dialog = index  # Set active dialog to the module's index
+                        st.rerun()
 
     @st.dialog("Add New Page")
     def add_page_dialog(self):
@@ -336,20 +354,20 @@ class ScenarioManager:
         """
         idx = self.scenario_state["current_page_idx"]
         current_label = self.scenario_data["pages"][idx]["label"]
-        
+
         new_label = st.text_input("Rename Page", value=current_label)
         if st.button("Update Label"):
             self.scenario_data["pages"][idx]["label"] = new_label
             st.session_state.active_dialog = None
             self.save()
             st.rerun()
-        
+
         st.divider()
         if st.button("🗑️ Delete Entire Page", type="primary", use_container_width=True):
             if len(self.scenario_data["pages"]) > 1:
                 self.scenario_data["pages"].pop(idx)
                 st.session_state.active_dialog = None
-                self.scenario_state["current_page_idx"] = 0 # Reset to first page after deletion
+                self.scenario_state["current_page_idx"] = 0  # Reset to first page after deletion
                 self.save()
                 st.rerun()
             else:
@@ -366,7 +384,7 @@ class ScenarioManager:
 
             if source_path.startswith(("http://", "https://")):
                 response = requests.get(source_path, stream=True)
-                response.raise_for_status() # Raise an HTTPError for bad responses (4xx or 5xx)
+                response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
                 with open(target_path, "wb") as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
@@ -377,7 +395,7 @@ class ScenarioManager:
                 else:
                     st.error(f"Local file not found: {source_path}")
                     return None
-            
+
             return filename
         except Exception as e:
             st.error(f"Failed to fetch image: {e}")
@@ -426,15 +444,16 @@ class ScenarioManager:
             "Module Type",
             ["text", "read_aloud", "image", "line_break", "character_roster", "skill_check", "combat_encounter"],
             format_func=lambda x: x.replace("_", " ").capitalize())
-        
+
         if mod_type == "image":
             source_type = st.radio("Image Source", ["Existing", "Upload", "URL or Local Path"], horizontal=True)
             selected = None
 
             if source_type == "Existing":
                 images = [f.name for f in self.image_dir.iterdir() if f.suffix in [".svg", ".png", ".jpg", ".jpeg"]]
+                curr = images.index(selected) if selected in images else 0
                 selected = st.selectbox("Select Image File", images)
-            
+
             elif source_type == "Upload":
                 uploaded_file = st.file_uploader("Choose an image", type=["png", "jpg", "jpeg", "svg"])
                 if uploaded_file:
@@ -442,7 +461,7 @@ class ScenarioManager:
                     with open(target_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
                     selected = uploaded_file.name
-            
+
             elif source_type == "URL or Local Path":
                 external_path = st.text_input("Enter URL or Absolute Local Path")
                 if external_path:
@@ -467,7 +486,7 @@ class ScenarioManager:
 
         elif mod_type == "text":
             content = st.text_area("Markdown Content", height=200, placeholder="Enter your text here...")
-            
+
             if st.button("Save"):
                 if content:
                     new_mod = {"type": "text", "content": content}
@@ -477,7 +496,7 @@ class ScenarioManager:
 
         elif mod_type == "read_aloud":
             content = st.text_area("Read Aloud Content", height=200, placeholder="Enter text to be read aloud...")
-            
+
             if st.button("Save"):
                 if content:
                     new_mod = {"type": "read_aloud", "content": content}
@@ -506,7 +525,8 @@ class ScenarioManager:
                 self._commit_module_change(new_mod, insert_at)
 
         elif mod_type == "combat_encounter":
-            st.info("Combat encounters now come pre-configured with standard PFS scaling buckets (Low 0-18, High 0-36).")
+            st.info(
+                "Combat encounters now come pre-configured with standard PFS scaling buckets (Low 0-18, High 0-36).")
             if st.button("Save"):
                 default_scaling = [
                     {"tier": "Low", "min_cp": 0, "max_cp": 9, "monsters": []},
@@ -544,9 +564,9 @@ class ScenarioManager:
 
         # Input for changing module position
         new_pos = st.number_input(
-            "Module Position", 
-            min_value=1, 
-            max_value=num_modules, 
+            "Module Position",
+            min_value=1,
+            max_value=num_modules,
             value=index + 1,
             key=f"edit_pos_{index}",
             help="Change the order of this module by setting its position number."
@@ -554,14 +574,15 @@ class ScenarioManager:
         new_index = new_pos - 1
 
         if mod_data["type"] == "image":
-            source_type = st.radio("Update Source", ["Existing", "Upload", "URL or Local Path"], horizontal=True, key=f"edit_img_src_{index}")
+            source_type = st.radio("Update Source", ["Existing", "Upload", "URL or Local Path"], horizontal=True,
+                                   key=f"edit_img_src_{index}")
             selected = mod_data.get("file")
 
             if source_type == "Existing":
                 images = [f.name for f in self.image_dir.iterdir() if f.suffix in [".svg", ".png", ".jpg", ".jpeg"]]
                 curr = images.index(selected) if selected in images else 0
                 selected = st.selectbox("Update Image File", images, index=curr)
-            
+
             elif source_type == "Upload":
                 uploaded_file = st.file_uploader("Upload new image", type=["png", "jpg", "jpeg", "svg"])
                 if uploaded_file:
@@ -569,7 +590,7 @@ class ScenarioManager:
                     with open(target_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
                     selected = uploaded_file.name
-            
+
             elif source_type == "URL or Local Path":
                 external_path = st.text_input("Enter URL or Absolute Local Path")
                 if external_path:
@@ -582,10 +603,12 @@ class ScenarioManager:
             st.write("Update Width")
             col_slider, col_input = st.columns([0.7, 0.3])
             with col_slider:
-                width_s = st.slider("Width Slider", 100, 2000, mod_data.get("width", 700), label_visibility="collapsed", key=f"edit_img_w_s_{index}")
+                width_s = st.slider("Width Slider", 100, 2000, mod_data.get("width", 700), label_visibility="collapsed",
+                                    key=f"edit_img_w_s_{index}")
             with col_input:
-                selected_width = st.number_input("Width Px", 100, 2000, width_s, label_visibility="collapsed", key=f"edit_img_w_n_{index}")
-            
+                selected_width = st.number_input("Width Px", 100, 2000, width_s, label_visibility="collapsed",
+                                                 key=f"edit_img_w_n_{index}")
+
             modules = self.scenario_data["pages"][page_idx]["modules"]
             if st.button("Update"):
                 if new_index != index:
@@ -594,15 +617,16 @@ class ScenarioManager:
                     modules[new_index].update({"file": selected, "width": selected_width})
                 else:
                     modules[index].update({"file": selected, "width": selected_width})
-                
+
                 st.session_state.active_dialog = None
                 st.session_state.editing_module_data = None
                 self.save()
                 st.rerun()
 
         elif mod_data["type"] == "text":
-            new_content = st.text_area("Update Markdown Content", value=mod_data.get("content", ""), height=200, key=f"edit_text_{index}")
-            
+            new_content = st.text_area("Update Markdown Content", value=mod_data.get("content", ""), height=200,
+                                       key=f"edit_text_{index}")
+
             modules = self.scenario_data["pages"][page_idx]["modules"]
             if st.button("Update"):
                 if new_index != index:
@@ -611,15 +635,16 @@ class ScenarioManager:
                     modules[new_index]["content"] = new_content
                 else:
                     modules[index]["content"] = new_content
-                
+
                 st.session_state.active_dialog = None
                 st.session_state.editing_module_data = None
                 self.save()
                 st.rerun()
 
         elif mod_data["type"] == "read_aloud":
-            new_content = st.text_area("Update Read Aloud Content", value=mod_data.get("content", ""), height=200, key=f"edit_ra_{index}")
-            
+            new_content = st.text_area("Update Read Aloud Content", value=mod_data.get("content", ""), height=200,
+                                       key=f"edit_ra_{index}")
+
             modules = self.scenario_data["pages"][page_idx]["modules"]
             if st.button("Update"):
                 if new_index != index:
@@ -628,14 +653,15 @@ class ScenarioManager:
                     modules[new_index]["content"] = new_content
                 else:
                     modules[index]["content"] = new_content
-                
+
                 st.session_state.active_dialog = None
                 st.session_state.editing_module_data = None
                 self.save()
                 st.rerun()
 
         elif mod_data["type"] == "line_break":
-            new_color = st.color_picker("Update Line Color", value=mod_data.get("color", "#2e7d32"), key=f"edit_lb_{index}")
+            new_color = st.color_picker("Update Line Color", value=mod_data.get("color", "#2e7d32"),
+                                        key=f"edit_lb_{index}")
 
             modules = self.scenario_data["pages"][page_idx]["modules"]
             if st.button("Update"):
@@ -649,13 +675,15 @@ class ScenarioManager:
                 st.rerun()
 
         elif mod_data["type"] == "combat_encounter":
-            mod_data["label"] = st.text_input("Module Label", value=mod_data.get("label", "⚔️ Combat Encounter"), key=f"edit_lbl_{index}")
+            mod_data["label"] = st.text_input("Module Label", value=mod_data.get("label", "⚔️ Combat Encounter"),
+                                              key=f"edit_lbl_{index}")
             st.write("### ⚖️ Encounter Scaling Groups")
 
             for g_idx, group in enumerate(mod_data.get("scaling", [])):
                 with st.expander(f"Group: {group['tier']} (CP {group['min_cp']}-{group['max_cp']})"):
                     st.write("#### Add Monster")
-                    m_markdown = st.text_area("Paste Scribe Markdown", key=f"edit_{index}_mmd_{g_idx}", height=150, help="Stat block details will be parsed automatically.")
+                    m_markdown = st.text_area("Paste Scribe Markdown", key=f"edit_{index}_mmd_{g_idx}", height=150,
+                                              help="Stat block details will be parsed automatically.")
 
                     if st.button("Parse and Add Monster", key=f"edit_{index}_abm_{g_idx}"):
                         if m_markdown:
@@ -677,11 +705,13 @@ class ScenarioManager:
                         with st.container():
                             mc1, mc4 = st.columns([5, 1])
                             mc1.write(f"**{monster['name']}**")
-                            
+
                             # Allow editing existing markdown
-                            new_m_md = st.text_area("Edit Markdown", value=monster.get("markdown", ""), key=f"edit_md_{index}_{g_idx}_{m_idx}", label_visibility="collapsed")
+                            new_m_md = st.text_area("Edit Markdown", value=monster.get("markdown", ""),
+                                                    key=f"edit_md_{index}_{g_idx}_{m_idx}",
+                                                    label_visibility="collapsed")
                             monster["markdown"] = new_m_md
-                            
+
                             if mc4.button("🗑️", key=f"edit_{index}_del_m_{g_idx}_{m_idx}"):
                                 group["monsters"].pop(m_idx)
                                 st.rerun()
@@ -699,19 +729,21 @@ class ScenarioManager:
                 st.rerun()
 
         elif mod_data["type"] == "skill_check":
-            mod_data["is_secret"] = st.checkbox("Secret Check", value=mod_data.get("is_secret", False), key=f"edit_sc_sec_{index}")
+            mod_data["is_secret"] = st.checkbox("Secret Check (GM Rolls Only)", value=mod_data.get("is_secret", False),
+                                                key=f"edit_sc_sec_{index}")
             default_label = f"🎲 {'Secret ' if mod_data['is_secret'] else ''}Skill Check"
-            mod_data["label"] = st.text_input("Module Label", value=mod_data.get("label", default_label), key=f"edit_lbl_{index}")
-            
+            mod_data["label"] = st.text_input("Module Label", value=mod_data.get("label", default_label),
+                                              key=f"edit_lbl_{index}")
+
             st.write("---")
             st.write("### Skill Configuration")
-            
+
             st.write("#### Add New Skill")
             new_skill_name = st.text_input("Skill Name", key=f"new_skill_name_{index}")
             ac1, ac2 = st.columns(2)
             new_low = ac1.number_input("Low Tier DC", value=15, key=f"new_low_{index}")
             new_high = ac2.number_input("High Tier DC", value=20, key=f"new_high_{index}")
-            
+
             if st.button("Add Skill", key=f"edit_{index}_add_skill"):
                 if new_skill_name:
                     mod_data["skills"].append({

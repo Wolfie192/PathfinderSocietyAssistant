@@ -1,3 +1,5 @@
+import os
+
 SCENARIOS = {
     "quests": {
         "01": {"name": "The Sandstone Secret", "tier_min": 1, "tier_max": 4},
@@ -198,6 +200,16 @@ SCENARIOS = {
     }
 }
 
+# Add a special "developer_mode" season and scenario if the DEVELOPER_MODE environment variable is set to "true"
+if os.environ.get("DEVELOPER_MODE", "false").lower() == "true":
+    SCENARIOS["developer_mode"] = {
+        "test_scenario": {"name": "Developer Test Scenario", "tier_min": 1, "tier_max": 10}
+    }
+
 
 if __name__ == "__main__":
     print(SCENARIOS["quests"]["01"])
+    # Example of how to check the developer mode scenario
+    if "developer_mode" in SCENARIOS:
+        print("\nDeveloper Mode is ON. Test Scenario:")
+        print(SCENARIOS["developer_mode"]["test_scenario"])

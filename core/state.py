@@ -36,3 +36,9 @@ def init_session_state():
     # Initialized to None.
     if "editing_module_data" not in st.session_state:
         st.session_state.editing_module_data = None
+
+    # edit_mode: A boolean flag indicating whether the application is currently in edit mode.
+    # When True, certain UI elements might become editable or additional controls might appear.
+    # Initialized to False, meaning the application starts in view mode.
+    if "edit_mode" not in st.session_state:
+        st.session_state.edit_mode = False
