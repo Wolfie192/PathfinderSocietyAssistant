@@ -35,6 +35,8 @@ class ImageModule(BaseModel):
 
         img_path = self.image_dir / self.image_name
         if img_path.exists():
-            st.image(str(img_path), width=self.width)
+            # Ensure width is an integer, providing a default if it's None
+            display_width = self.width if self.width is not None else 700
+            st.image(str(img_path), width=display_width)
         else:
             st.error(f"Image not found at expected path: {img_path}")

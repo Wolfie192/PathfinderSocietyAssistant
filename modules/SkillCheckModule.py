@@ -125,7 +125,7 @@ class SkillCheckModule(BaseModel):
 
             # Iterate through each character in the roster to display their skill check row
             for i, char in enumerate(roster):
-                char_name = char.get("char") or char.get("player") or f"Player {i+1}"
+                char_name = char.get("name") or f"Player {i+1}"
                 row_key = f"sc_{self.module_id}_{i}" # Unique key for Streamlit widgets in this row
                 
                 with st.container(): # Use a container to group elements for each character row
@@ -161,8 +161,9 @@ class SkillCheckModule(BaseModel):
                     if self.is_secret:
                         # For secret checks, GM inputs modifier and the roll is generated
                         # Modifier Input (persistent)
-                        stored_mod = self.storage.get(f"mod_{i}")
-                        mod = c3.number_input("Mod", value=stored_mod, step=1, key=f"{row_key}_mod", label_visibility="collapsed", placeholder="Mod")
+                        stored_mod = self.storage.get(f"mod_{i}", 0)
+                        mod_raw = c3.number_input("Mod", value=stored_mod, step=1, key=f"{row_key}_mod", label_visibility="collapsed", placeholder="Mod")
+                        mod = int(mod_raw)
                         
                         if mod != stored_mod:
                             self.storage[f"mod_{i}"] = mod
@@ -190,8 +191,9 @@ class SkillCheckModule(BaseModel):
                     else:
                         # For normal checks, player inputs total and natural status
                         # Manual Total Input (persistent)
-                        stored_total = self.storage.get(f"total_{i}")
-                        total_input = c3.number_input("Total", value=stored_total, step=1, key=f"{row_key}_total", label_visibility="collapsed", placeholder="Total")
+                        stored_total = self.storage.get(f"total_{i}", 0)
+                        total_input_raw = c3.number_input("Total", value=stored_total, step=1, key=f"{row_key}_total", label_visibility="collapsed", placeholder="Total")
+                        total_input = int(total_input_raw)
                         
                         if total_input != stored_total:
                             self.storage[f"total_{i}"] = total_input

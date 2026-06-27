@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import uuid
 from modules.scribe_formatter import ScribeFormatter # Import the new formatter
-from core.utils import parse_scribe_markdown # Import the shared utility function
 
 
 class CombatEncounterModule(BaseModel):

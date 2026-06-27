@@ -1,8 +1,9 @@
-# modules/scribe_formatter.py
-
 import re
 import base64
 from pathlib import Path
+import logging # Import logging for consistency
+
+logger = logging.getLogger(__name__) # Get logger instance
 
 class ScribeFormatter:
     """
@@ -153,8 +154,8 @@ class ScribeFormatter:
             font-family: 'ff-good-web-pro-condensed', var(--font-family-sans-serif) !important;
         }
         .scribe-hr {
-            margin-top: 0.15rem;
-            margin-bottom: 0.15rem;
+            margin-top: 0; /* Changed from 0.15rem */
+            margin-bottom: 0; /* Changed from 0.15rem */
             border: 0;
             border-top: 1px solid rgba(0, 0, 0, 0.75);
             border-bottom: 1px solid rgba(0, 0, 0, 0.125);
@@ -229,7 +230,7 @@ class ScribeFormatter:
             text-indent: -1em;
             margin-top: 0.25rem; /* Smaller top margin for hanging paragraphs */
             margin-bottom: 0.25rem;
-            line-height: 1.2; /* Slightly tighter line-height for hanging paragraphs */
+            line-height: 1.1; /* Slightly tighter line-height for hanging paragraphs */
         }
 
         /* Remove margin between consecutive hanging paragraphs within an item */
@@ -291,6 +292,11 @@ class ScribeFormatter:
             vertical-align: middle;
             margin-right: 0.1em;
         }
+        
+        /* Custom hr style for scribe-hr */
+        .scribe-hr {
+            margin: 0 !important;
+        }
     """
 
     def __init__(self, root_dir: Path):
@@ -301,7 +307,7 @@ class ScribeFormatter:
         """Reads an image file and returns its base64 encoded string."""
         image_path = self.root_dir / "data" / image_name
         if not image_path.exists():
-            print(f"Warning: Image not found at {image_path}")
+            logger.warning(f"Image not found at {image_path}") # Changed from print to logger.warning
             return "" # Return empty string if image not found
 
         with open(image_path, "rb") as f:
@@ -421,7 +427,7 @@ class ScribeFormatter:
             # All other lines are treated as part of a paragraph block
             else:
                 # Convert bold markdown to strong HTML
-                line_to_add = re.sub(r'\*\*([^\*]+?)\*\*', r'<strong>\1</strong>', line)
+                line_to_add = re.sub(r'\*\*([^*]+?)\*\*', r'<strong>\1</strong>', line)
                 current_paragraph_lines.append(line_to_add)
 
         _flush_paragraph()  # Flush any remaining paragraph lines at the end
