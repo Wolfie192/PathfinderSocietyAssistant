@@ -14,6 +14,7 @@ from modules.LineBreakModule import LineBreakModule
 from modules.CharacterRosterModule import CharacterRosterModule
 from modules.SkillCheckModule import SkillCheckModule
 from modules.CombatEncounterModule import CombatEncounterModule
+from core.utils import parse_scribe_markdown # Import the shared utility function
 
 
 class ScenarioManager:
@@ -277,6 +278,14 @@ class ScenarioManager:
             content_col, control_col = st.columns([0.95, 0.05])
 
             with content_col:
+                # Determine if bottom padding should be added for ReadAloudModule
+                add_bottom_padding = True
+                active_page = self.scenario_data["pages"][self.scenario_state["current_page_idx"]]
+                modules = active_page.get("modules", [])
+                if module_data["type"] == "read_aloud" and (index + 1) < len(modules):
+                    if modules[index + 1]["type"] == "read_aloud":
+                        add_bottom_padding = False
+
                 # Instantiate and render the appropriate module based on its type
                 if module_data["type"] == "image":
                     mod = ImageModule(
@@ -290,7 +299,7 @@ class ScenarioManager:
                     mod.render()
                 elif module_data["type"] == "read_aloud":
                     mod = ReadAloudModule(module_data.get("content", ""))
-                    mod.render()
+                    mod.render(add_bottom_padding=add_bottom_padding) # Pass the padding flag
                 elif module_data["type"] == "line_break":
                     mod = LineBreakModule(module_data.get("color", "#2e7d32"))
                     mod.render()
@@ -350,28 +359,71 @@ class ScenarioManager:
     @st.dialog("Edit Page Settings")
     def edit_page_dialog(self):
         """
-        Streamlit dialog for editing the current page's settings (e.g., renaming, deleting).
+        Streamlit dialog for editing the current page's settings (e.g., renaming, deleting, reordering).
         """
         idx = self.scenario_state["current_page_idx"]
         current_label = self.scenario_data["pages"][idx]["label"]
+        num_pages = len(self.scenario_data["pages"])
 
         new_label = st.text_input("Rename Page", value=current_label)
-        if st.button("Update Label"):
-            self.scenario_data["pages"][idx]["label"] = new_label
-            st.session_state.active_dialog = None
-            self.save()
-            st.rerun()
+
+        # Add number input for reordering
+        new_pos = st.number_input(
+            "Page Position",
+            min_value=1,
+            max_value=num_pages,
+            value=idx + 1,
+            key="page_position_input",
+            help="Change the order of this page by setting its position number."
+        )
+        new_index = new_pos - 1 # Convert 1-based position to 0-based index
+
+        if st.button("Update Page Settings"): # Renaming the button to be more general
+            # Check if label changed
+            label_changed = (new_label != current_label)
+            # Check if position changed
+            position_changed = (new_index != idx)
+
+            if label_changed or position_changed:
+                # Update label if it changed
+                if label_changed:
+                    self.scenario_data["pages"][idx]["label"] = new_label
+
+                # Reorder if position changed
+                if position_changed:
+                    # Get the page data to move
+                    page_to_move = self.scenario_data["pages"].pop(idx)
+                    # Insert it at the new position
+                    self.scenario_data["pages"].insert(new_index, page_to_move)
+                    # Update the current_page_idx in scenario_state to reflect the new position
+                    self.scenario_state["current_page_idx"] = new_index
+
+                st.session_state.active_dialog = None
+                self.save()
+                st.rerun()
+            else:
+                st.warning("No changes detected.")
 
         st.divider()
         if st.button("🗑️ Delete Entire Page", type="primary", use_container_width=True):
             if len(self.scenario_data["pages"]) > 1:
                 self.scenario_data["pages"].pop(idx)
                 st.session_state.active_dialog = None
-                self.scenario_state["current_page_idx"] = 0  # Reset to first page after deletion
+                # Adjust current_page_idx
+                if len(self.scenario_data["pages"]) == 0:
+                    self.scenario_state["current_page_idx"] = 0
+                elif idx >= len(self.scenario_data["pages"]): # If the last page was deleted
+                    self.scenario_state["current_page_idx"] = len(self.scenario_data["pages"]) - 1
+                else: # If a middle page was deleted, the next page shifts into its spot
+                    self.scenario_state["current_page_idx"] = idx
                 self.save()
                 st.rerun()
             else:
                 st.error("You cannot delete the last remaining page.")
+
+        if st.button("Cancel", use_container_width=True, key="cancel_edit_page"):
+            st.session_state.active_dialog = None
+            st.rerun()
 
     def _process_external_image(self, source_path: str) -> str:
         """
@@ -400,26 +452,6 @@ class ScenarioManager:
         except Exception as e:
             st.error(f"Failed to fetch image: {e}")
             return None
-
-    def _parse_scribe_markdown(self, md_text: str):
-        """
-        Parses Pathfinder Scribe markdown for monster Name, HP, AC, and Initiative.
-        """
-        # Regex to extract Name (text after first '#')
-        name_match = re.search(r"^#\s*(.*)", md_text, re.MULTILINE)
-        # Regex to extract AC (number after **AC**)
-        ac_match = re.search(r"\*\*AC\*\*\s*(\d+)", md_text)
-        # Regex to extract HP (number after **HP**)
-        hp_match = re.search(r"\*\*HP\*\*\s*(\d+)", md_text)
-        # Regex to extract Initiative (first modifier (+/- X) after traits line)
-        init_match = re.search(r"- ;.*?\n\*\*.*?\*\*\s*([+-]\d+)", md_text, re.DOTALL)
-
-        return {
-            "name": name_match.group(1).strip() if name_match else "Unknown Monster",
-            "ac": ac_match.group(1) if ac_match else "N/A",
-            "hp": int(hp_match.group(1)) if hp_match else 10,
-            "init": int(init_match.group(1)) if init_match else 0
-        }
 
     def _commit_module_change(self, module_data, insert_at=None):
         """
@@ -687,7 +719,7 @@ class ScenarioManager:
 
                     if st.button("Parse and Add Monster", key=f"edit_{index}_abm_{g_idx}"):
                         if m_markdown:
-                            stats = self._parse_scribe_markdown(m_markdown)
+                            stats = parse_scribe_markdown(m_markdown) # Use the imported function
                             group["monsters"].append({
                                 "name": stats["name"],
                                 "max_hp": stats["hp"],
@@ -784,7 +816,7 @@ class ScenarioManager:
             self.save()
             st.rerun()
 
-        if c_can.button("Cancel", use_container_width=True):
+        if c_can.button("Cancel", use_container_width=True, key="cancel_edit_module"):
             st.session_state.active_dialog = None
             st.session_state.editing_module_data = None
             # No save here, just refresh to close the dialog

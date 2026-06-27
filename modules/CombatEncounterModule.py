@@ -1,9 +1,12 @@
 from modules.BaseModel import BaseModel
 import streamlit as st
 import random
+import json
 from pathlib import Path
 import uuid
 from modules.scribe_formatter import ScribeFormatter # Import the new formatter
+from core.utils import parse_scribe_markdown # Import the shared utility function
+
 
 class CombatEncounterModule(BaseModel):
     """
@@ -14,7 +17,7 @@ class CombatEncounterModule(BaseModel):
     """
 
     def __init__(self, module_data: dict, scenario_state: dict, tier_mode: str, module_id: int, save_callback,
-                 monster_dir: Path, root_dir: Path): # Added root_dir
+                 monster_dir: Path, root_dir: Path):
         """
         Initializes the CombatEncounterModule.
 
@@ -38,7 +41,7 @@ class CombatEncounterModule(BaseModel):
         self.module_id = module_id
         self.save_callback = save_callback
         self.monster_dir = monster_dir
-        self.root_dir = root_dir # Store root_dir
+        self.root_dir = root_dir
 
         # Initialize persistent storage for this specific combat module within scenario_state
         if "combat_state" not in self.scenario_state:
@@ -54,7 +57,26 @@ class CombatEncounterModule(BaseModel):
             }
 
         self.storage = self.scenario_state["combat_state"][self.mod_key]
-        self.scribe_formatter = ScribeFormatter(self.root_dir) # Pass root_dir to ScribeFormatter
+        self.scribe_formatter = ScribeFormatter(self.root_dir)
+
+    def _load_global_monsters(self) -> list[dict]:
+        """
+        Loads monster data from JSON files in the global monsters directory.
+        """
+        global_monster_path = self.root_dir / "data" / "monsters"
+        global_monster_path.mkdir(parents=True, exist_ok=True) # Ensure directory exists
+
+        monsters = []
+        for monster_file in global_monster_path.glob("*.json"):
+            try:
+                with open(monster_file, "r", encoding="utf-8") as f:
+                    monster_data = json.load(f)
+                    monsters.append(monster_data)
+            except json.JSONDecodeError as e:
+                st.warning(f"Could not load monster from {monster_file.name}: {e}")
+            except Exception as e:
+                st.warning(f"An error occurred loading monster {monster_file.name}: {e}")
+        return monsters
 
     def _get_scaled_monsters(self) -> list[dict]:
         """
@@ -110,7 +132,16 @@ class CombatEncounterModule(BaseModel):
         Assigns initial initiative rolls for monsters and sets combat status to started.
         """
         roster = self.scenario_state.get("roster", [])
-        monsters = self._get_scaled_monsters()
+        scaled_monsters = self._get_scaled_monsters()
+        
+        # Get globally selected monsters from session state
+        selected_global_monster_names = st.session_state.get(f"selected_global_monsters_{self.module_id}", [])
+        global_monsters_data = self._load_global_monsters()
+        
+        # Filter global monsters based on selection
+        global_monsters_to_add = [
+            m for m in global_monsters_data if m["name"] in selected_global_monster_names
+        ]
 
         new_participants = []
 
@@ -125,8 +156,8 @@ class CombatEncounterModule(BaseModel):
                 "hp": 0, "max_hp": 0  # Players track their own HP outside the app
             })
 
-        # Add Monsters as participants
-        for m in monsters:
+        # Add Scaled Monsters as participants
+        for m in scaled_monsters:
             hp_val = m.get("max_hp", 10)
             init_mod = m.get("init_mod", 0)
             roll = random.randint(1, 20)  # Roll d20 for monster initiative
@@ -144,12 +175,38 @@ class CombatEncounterModule(BaseModel):
                 "conditions": [], # Initialize conditions as an empty list
                 "markdown": m.get("markdown", "")  # Store monster stat block markdown
             })
+            
+        # Add Selected Global Monsters as participants
+        for m in global_monsters_to_add:
+            hp_val = m.get("hp", 10) # Use 'hp' from loaded data
+            init_mod = m.get("init", 0) # Use 'init' from loaded data
+            roll = random.randint(1, 20)  # Roll d20 for monster initiative
+
+            new_participants.append({
+                "id": str(uuid.uuid4()),
+                "name": m["name"],
+                "type": "monster",
+                "token": "",
+                "ac": m.get("ac", "N/A"),
+                "init": roll + init_mod,
+                "init_mod": init_mod,
+                "hp": hp_val, "max_hp": hp_val,
+                "notes": "",
+                "conditions": [],
+                "markdown": m.get("markdown", "")
+            })
+
 
         self.storage["participants"] = new_participants
         self.storage["started"] = True
         self.storage["turn_idx"] = 0
         self.storage["round"] = 1
         self.save_callback()  # Persist the initial combat state
+        
+        # Clear selected global monsters from session state after adding them
+        if f"selected_global_monsters_{self.module_id}" in st.session_state:
+            del st.session_state[f"selected_global_monsters_{self.module_id}"]
+
 
     @st.dialog("Monster Stats")
     def show_monster_stats(self, participant_id: str):
@@ -362,6 +419,25 @@ class CombatEncounterModule(BaseModel):
         with st.expander(display_label, expanded=self.storage.get("started", False)):
             if not self.storage["started"]:
                 st.info("Combat not started. Scaling will be applied based on current Roster and Tier.")
+
+                # --- Global Monster Selection ---
+                global_monsters = self._load_global_monsters()
+                if global_monsters:
+                    monster_names = [m["name"] for m in global_monsters]
+                    selected_monsters = st.multiselect(
+                        "Add Global Monsters to Encounter",
+                        options=monster_names,
+                        key=f"selected_global_monsters_{self.module_id}",
+                        help="Select monsters from your global monster library to add to this encounter."
+                    )
+                    if st.button("Add Selected Monsters", key=f"add_global_monsters_btn_{self.module_id}"):
+                        # This button just triggers a rerun, setup_combat will pick up the selection
+                        st.rerun()
+                else:
+                    st.info("No global monsters found. Add some from the main screen!")
+                st.divider()
+                # --- End Global Monster Selection ---
+
                 if st.button("🎲 Roll Initiative & Start", key=f"start_{self.module_id}"):
                     self.setup_combat()  # Initialize combat participants
                     st.rerun()  # Rerun to display the combat tracker

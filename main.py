@@ -1,10 +1,13 @@
 import streamlit as st
-
+import json
+import re
 from pathlib import Path
+
 from core.directories import verify_directories
 from core.scenario_manager import ScenarioManager
 from core.scenario_data import ScenarioData # Import the new ScenarioData class
 from core.state import init_session_state
+from core.utils import parse_scribe_markdown # Import the shared utility function
 
 
 def on_season_change():
@@ -15,10 +18,52 @@ def on_season_change():
     st.session_state.current_scenario = None
 
 
+@st.dialog("Add New Monster")
+def add_monster_global_dialog(monster_dir: Path):
+    """
+    Streamlit dialog for adding a new monster globally.
+    """
+    st.write("Paste the Pathfinder Scribe markdown for the monster below.")
+    monster_markdown = st.text_area("Monster Scribe Markdown", height=300,
+                                    placeholder="e.g., # Goblin\n**HP** 10\n**AC** 15\n...")
+
+    if st.button("Parse and Save Monster"):
+        if monster_markdown:
+            try:
+                monster_data = parse_scribe_markdown(monster_markdown) # Use the imported function
+                monster_name = monster_data["name"]
+
+                # Sanitize name for filename
+                filename = "".join(c for c in monster_name if c.isalnum() or c in (' ', '.', '_')).rstrip()
+                filename = filename.replace(" ", "_") + ".json"
+                file_path = monster_dir / filename
+
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(monster_data, f, indent=4)
+                st.success(f"Monster '{monster_name}' saved successfully!")
+                st.session_state.active_dialog = None
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error parsing or saving monster: {e}")
+        else:
+            st.warning("Please paste monster markdown to save.")
+
+    if st.button("Cancel", key="cancel_add_monster_global"):
+        st.session_state.active_dialog = None
+        st.rerun()
+
+
 def main_page(root_dir: Path):
     """
     Renders the main page of the application, allowing users to select a season and scenario.
     """
+    # Add "Add Monster" button
+    if st.button("➕ Add Global Monster", use_container_width=True):
+        st.session_state.active_dialog = "add_monster_global"
+        st.rerun()
+
+    st.divider()
+
     # Retrieve available seasons using the ScenarioData class
     available_seasons = ScenarioData.get_available_seasons()
 
@@ -62,6 +107,13 @@ def main_page(root_dir: Path):
         # Initialize ScenarioManager with selected season, scenario, and root directory
         st.session_state.scenario_manager = ScenarioManager(current_season, current_scenario, root_dir)
         st.rerun() # Rerun the app to switch to the scenario view
+
+    # Handle active dialogs
+    active_diag = st.session_state.get("active_dialog")
+    if active_diag == "add_monster_global":
+        monster_dir = root_dir / "data" / "monsters"
+        monster_dir.mkdir(parents=True, exist_ok=True) # Ensure directory exists
+        add_monster_global_dialog(monster_dir)
 
 
 def main(root_dir: Path):

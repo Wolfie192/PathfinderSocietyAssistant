@@ -19,11 +19,15 @@ class ReadAloudModule(BaseModel):
         super().__init__()
         self.content = content
 
-    def render(self):
+    def render(self, add_bottom_padding: bool = True):
         """
         Renders the read-aloud content in the Streamlit application.
         The content is processed to handle paragraphs and then displayed within
         a custom-styled HTML div using st.markdown with unsafe_allow_html=True.
+
+        Args:
+            add_bottom_padding (bool): If True, adds 20px of bottom margin.
+                                       If False, adds 0px of bottom margin.
         """
         if not self.content:
             st.info("Empty read aloud module.")
@@ -41,8 +45,11 @@ class ReadAloudModule(BaseModel):
         # Join processed paragraphs back with double newlines for HTML rendering
         cleaned_content = '\n\n'.join(processed_paragraphs)
 
+        # Determine bottom margin based on the add_bottom_padding flag
+        bottom_margin = "20px" if add_bottom_padding else "0px"
+
         # Render the content within a styled div
         st.markdown(
-            f'<div style="color: #1b5e20; background-color: #f1f8e9; border-left: 5px solid #2e7d32; padding: 15px; font-size: 1.1em; font-style: italic; white-space: pre-wrap; border-radius: 4px;">{cleaned_content}</div>',
+            f'<div style="color: #1b5e20; background-color: #f1f8e9; border-left: 5px solid #2e7d32; padding: 15px; font-size: 1.1em; font-style: italic; white-space: pre-wrap; border-radius: 4px; margin-bottom: {bottom_margin};">{cleaned_content}</div>',
             unsafe_allow_html=True
         )
